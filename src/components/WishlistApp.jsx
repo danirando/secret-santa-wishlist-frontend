@@ -28,6 +28,12 @@ const WishlistApp = () => {
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishedLink, setPublishedLink] = useState(null);
 
+  // Liste pubblicate salvate in localStorage (bonus)
+  const [savedLists, setSavedLists] = useState(() => {
+    const saved = localStorage.getItem('secret-santa-published-lists');
+    return saved ? JSON.parse(saved) : [];
+  });
+
   useEffect(() => {
     localStorage.setItem('secret-santa-title', wishlistTitle);
   }, [wishlistTitle]);
@@ -115,6 +121,22 @@ const WishlistApp = () => {
       const shareUrl = `${window.location.origin}/wishlist/${uuid}`;
       
       setPublishedLink(shareUrl);
+
+      // Salva la lista pubblicata tra le "liste salvate"
+      setSavedLists(prev => {
+        const updated = [
+          {
+            uuid,
+            title: wishlistTitle || "La mia Lista Desideri",
+            url: shareUrl,
+            createdAt: new Date().toISOString(),
+          },
+          // Evita duplicati per lo stesso uuid
+          ...prev.filter(list => list.uuid !== uuid),
+        ];
+        localStorage.setItem('secret-santa-published-lists', JSON.stringify(updated));
+        return updated;
+      });
       
       // Cleanup draft after successful publish
       setGifts([]);
@@ -134,6 +156,24 @@ const WishlistApp = () => {
     alert("Link copiato!");
   };
 
+  const handleWebShare = () => {
+    if (!publishedLink) return;
+
+    if (navigator.share) {
+      navigator.share({
+        title: 'La mia lista Secret Santa',
+        text: 'Guarda la mia lista dei desideri 🎄',
+        url: publishedLink,
+      }).catch(() => {
+        // Ignora errori dell'utente che chiude la share sheet
+      });
+    } else {
+      // Fallback: copia negli appunti
+      navigator.clipboard?.writeText(publishedLink);
+      alert("Link copiato!");
+    }
+  };
+
   if (publishedLink) {
     return (
       <div className="wishlist-app success-view">
@@ -145,6 +185,14 @@ const WishlistApp = () => {
             <input type="text" readOnly value={publishedLink} />
             <button className="btn btn-primary" onClick={copyToClipboard}>Copia Link</button>
           </div>
+
+          <button 
+            className="btn btn-secondary" 
+            onClick={handleWebShare}
+            style={{ marginTop: '0.75rem' }}
+          >
+            Condividi 🔗
+          </button>
           
           <button 
             className="btn-text" 
@@ -201,6 +249,36 @@ const WishlistApp = () => {
             onUpdateGift={updateGift}
           />
         </section>
+
+        {savedLists.length > 0 && (
+          <section className="saved-lists-section">
+            <h2>Le tue liste pubblicate</h2>
+            <ul className="saved-lists">
+              {savedLists.map(list => (
+                <li key={list.uuid} className="saved-list-item">
+                  <div className="saved-list-info">
+                    <div className="saved-list-title">{list.title}</div>
+                    {list.createdAt && (
+                      <div className="saved-list-meta">
+                        Creata il {new Date(list.createdAt).toLocaleDateString()}
+                      </div>
+                    )}
+                  </div>
+                  <div className="saved-list-actions">
+                    <a 
+                      href={list.url} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="btn btn-secondary"
+                    >
+                      Apri
+                    </a>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         <div className="publish-section">
             <button 

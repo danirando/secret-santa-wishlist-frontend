@@ -8,11 +8,24 @@ const WishlistViewer = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
+    // Stato per la modale di prenotazione
+    const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
+    const [selectedGift, setSelectedGift] = useState(null);
+    const [bookingMessage, setBookingMessage] = useState('');
+    const [bookingLoading, setBookingLoading] = useState(false);
+
+    // Modale semplice per messaggi (successo/errore)
+    const [infoModal, setInfoModal] = useState({
+        isOpen: false,
+        title: '',
+        message: '',
+    });
+
     // Fetch wishlist data using uuid
     useEffect(() => {
         const fetchWishlist = async () => {
             try {
-                const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/wishlists/${uuid}`);
+                const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/wishlist/${uuid}`);
                 if (!response.ok) {
                     if (response.status === 404) throw new Error("Lista non trovata");
                     throw new Error("Errore nel caricamento della lista");
@@ -31,16 +44,32 @@ const WishlistViewer = () => {
         }
     }, [uuid]);
 
-    const handleBookGift = async (giftId) => {
-        const message = prompt("Vuoi lasciare un messaggio per il proprietario? (Opzionale)");
-        
+    const openBookingModal = (gift) => {
+        setSelectedGift(gift);
+        setBookingMessage('');
+        setIsBookingModalOpen(true);
+    };
+
+    const closeBookingModal = () => {
+        if (bookingLoading) return;
+        setIsBookingModalOpen(false);
+        setSelectedGift(null);
+        setBookingMessage('');
+    };
+
+    const handleConfirmBooking = async () => {
+        if (!selectedGift) return;
+
+        setBookingLoading(true);
+        const id = selectedGift.id;
+
         try {
-            const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/gifts/${giftId}/book`, {
+            const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/gifts/${id}/book`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ booked_message: message || "" }),
+                body: JSON.stringify({ booked_message: bookingMessage || "" }),
             });
 
             if (!response.ok) {
@@ -48,18 +77,28 @@ const WishlistViewer = () => {
                 throw new Error(errData.message || "Impossibile prenotare il regalo");
             }
             
-            // Optimistic update or refetch
+            // Optimistic update o refetch
             setWishlist(prev => ({
                 ...prev,
                 gifts: prev.gifts.map(g => 
-                    g.id === giftId ? { ...g, is_booked: true } : g
+                    g.id === id ? { ...g, is_booked: true } : g
                 )
             }));
-            
-            alert("Regalo prenotato con successo! 🎅");
 
+            setInfoModal({
+                isOpen: true,
+                title: "Regalo prenotato! 🎅",
+                message: "Hai prenotato con successo questo regalo. Grazie per la tua gentilezza!",
+            });
+            closeBookingModal();
         } catch (err) {
-            alert(err.message);
+            setInfoModal({
+                isOpen: true,
+                title: "Errore nella prenotazione",
+                message: err.message || "Si è verificato un errore durante la prenotazione del regalo.",
+            });
+        } finally {
+            setBookingLoading(false);
         }
     };
 
@@ -110,11 +149,18 @@ const WishlistViewer = () => {
 
                             <div className="viewer-gift-action">
                                 {gift.is_booked ? (
-                                    <span className="booked-badge">❌ Già preso</span>
+                                    <button
+                                        type="button"
+                                        className="btn btn-secondary booked-button"
+                                        disabled
+                                    >
+                                        Già prenotato
+                                    </button>
                                 ) : (
                                     <button 
+                                        type="button"
                                         className="btn btn-primary"
-                                        onClick={() => handleBookGift(gift.id)}
+                                        onClick={() => openBookingModal(gift)}
                                     >
                                         Prenota 🎁
                                     </button>
@@ -125,6 +171,71 @@ const WishlistViewer = () => {
                 </ul>
             </main>
             
+            {/* Modale di prenotazione regalo */}
+            {isBookingModalOpen && selectedGift && (
+                <div className="modal-overlay" onClick={closeBookingModal}>
+                    <div className="modal-content" onClick={e => e.stopPropagation()}>
+                        <h3>🎁 Prenota questo regalo</h3>
+                        <p>
+                            Stai prenotando: <strong>{selectedGift.name}</strong>
+                        </p>
+                        <label className="booking-message-label">
+                            Aggiungi un messaggio di auguri (opzionale)
+                            <textarea
+                                className="booking-message-textarea"
+                                placeholder="Scrivi un messaggio carino per il proprietario della lista..."
+                                value={bookingMessage}
+                                onChange={e => setBookingMessage(e.target.value)}
+                                rows={4}
+                            />
+                        </label>
+                        <div className="modal-actions">
+                            <button
+                                className="btn btn-secondary"
+                                type="button"
+                                onClick={closeBookingModal}
+                                disabled={bookingLoading}
+                            >
+                                Annulla
+                            </button>
+                            <button
+                                className="btn btn-primary"
+                                type="button"
+                                onClick={handleConfirmBooking}
+                                disabled={bookingLoading}
+                            >
+                                {bookingLoading ? "Prenotazione..." : "Conferma prenotazione"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modale semplice informativa (successo/errore) */}
+            {infoModal.isOpen && (
+                <div
+                    className="modal-overlay"
+                    onClick={() => setInfoModal(prev => ({ ...prev, isOpen: false }))}
+                >
+                    <div
+                        className="modal-content"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <h3>{infoModal.title}</h3>
+                        <p>{infoModal.message}</p>
+                        <div className="modal-actions">
+                            <button
+                                type="button"
+                                className="btn btn-primary"
+                                onClick={() => setInfoModal(prev => ({ ...prev, isOpen: false }))}
+                            >
+                                Ok
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <footer className="viewer-footer">
                 <Link to="/">Crea la tua lista!</Link>
             </footer>
